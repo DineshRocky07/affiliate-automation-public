@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+credentials/
+data/*.db
+data/*.jpg
+data/.daily_run.lock
+logs/
+.pytest_cache/

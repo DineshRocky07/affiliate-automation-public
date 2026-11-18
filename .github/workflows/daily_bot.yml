@@ -1,0 +1,229 @@
+name: Daily Affiliate Publisher
+
+on:
+  schedule:
+    # 🌙 Tonight Test Run: 12:05 AM IST (18:35 UTC)
+    - cron: "35 18 * * *"
+    # ☀️ Daily Morning Peak: 11:30 AM IST (06:00 UTC)
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run mode (UNCHECK to send REAL live posts to Telegram)"
+        type: boolean
+        default: false
+      force_repost:
+        description: "Repost sheet rows that are already marked as seen (testing)"
+        type: boolean
+        default: false
+      reset_cache:
+        description: "HARD RESET: delete posts/seen history before this run (testing)"
+        type: boolean
+        default: false
+      max_posts:
+        description: "Max posts this run (default 100)"
+        default: "100"
+      post_all:
+        description: "Post the WHOLE sheet in this run"
+        type: boolean
+        default: true
+
+concurrency:
+  group: daily-affiliate-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restore SQLite dedupe ledger
+        uses: actions/cache@v4
+        with:
+          path: data/affiliate.db
+          key: affiliate-db-${{ github.run_id }}
+          restore-keys: |
+            affiliate-db-
+
+      - name: Write and validate Google Service Account credentials
+        env:
+          SA_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON || secrets.GOOGLE_CREDENTIALS || secrets.GCP_SA_KEY || secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import sys
+
+          raw = os.environ.get("SA_JSON", "").strip()
+          if not raw:
+              sys.exit(
+                  "GOOGLE_SERVICE_ACCOUNT_JSON secret is missing. "
+                  "Add it in Settings > Secrets and variables > Actions."
+              )
+          if not raw.startswith("{"):
+              try:
+                  raw = base64.b64decode(raw).decode("utf-8")
+              except Exception:
+                  pass
+          try:
+              data = json.loads(raw)
+          except Exception as exc:
+              sys.exit(
+                  f"Service-account JSON is invalid ({exc}). "
+                  "Paste the full JSON file contents, not a path."
+              )
+          for key in ("type", "project_id", "private_key", "client_email"):
+              if key not in data:
+                  sys.exit(f"Service-account JSON is missing '{key}'.")
+
+          path = pathlib.Path("credentials/google-service-account.json")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(raw, encoding="utf-8")
+          try:
+              path.chmod(0o600)
+          except OSError:
+              pass
+
+          print(f"Credentials written for {data['client_email']} ({len(raw)} bytes)")
+          print("Share the Google Sheet with that exact email as Viewer.")
+          PY
+
+      - name: Check cloud secrets and credentials
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || vars.DRY_RUN || secrets.DRY_RUN || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || '@YourDealsChannel' }}
+          AJIO_API_KEY: ${{ secrets.AJIO_API_KEY || vars.AJIO_API_KEY }}
+          AJIO_CAMPAIGN_ID: ${{ vars.AJIO_CAMPAIGN_ID || secrets.AJIO_CAMPAIGN_ID || '1' }}
+          AJIO_PUB_ID: ${{ vars.AJIO_PUB_ID || secrets.AJIO_PUB_ID || '16469' }}
+          AJIO_TRACKING_BASE: ${{ vars.AJIO_TRACKING_BASE || secrets.AJIO_TRACKING_BASE || 'https://ajiotrk.vibconnect.in/click' }}
+          CUELINKS_API_KEY: ${{ secrets.CUELINKS_API_KEY || vars.CUELINKS_API_KEY }}
+          CUELINKS_CID: ${{ secrets.CUELINKS_CID || vars.CUELINKS_CID }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID || vars.GOOGLE_SHEET_ID || 'YOUR_GOOGLE_SHEET_ID' }}
+          GOOGLE_WORKSHEET: ${{ vars.GOOGLE_WORKSHEET || secrets.GOOGLE_WORKSHEET || 'deals' }}
+          GOOGLE_CREDENTIALS_FILE: credentials/google-service-account.json
+          GOOGLE_SHEET_CSV_URL: ${{ secrets.GOOGLE_SHEET_CSV_URL || vars.GOOGLE_SHEET_CSV_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          from app.config import get_settings
+
+          s = get_settings()
+          print("=== CLOUD CREDENTIALS CHECK ===")
+          print("TELEGRAM_BOT_TOKEN :", "PRESENT" if s.telegram_bot_token else "MISSING")
+          print("TELEGRAM_CHAT_ID   :", s.telegram_chat_id or "MISSING")
+          print("GOOGLE_SHEET_ID    :", s.google_sheet_id or "MISSING")
+          print("GOOGLE_WORKSHEET   :", s.google_worksheet)
+          print("GOOGLE_CREDENTIALS :", "FOUND on disk" if os.path.exists(s.google_credentials_file) else "MISSING on disk")
+          print("GOOGLE_SHEET_CSV   :", "PRESENT" if s.google_sheet_csv_url else "not set")
+          print("DRY_RUN mode       :", s.dry_run, "(Should be False for real posts)")
+          print("FORCE_REPOST       :", s.force_repost)
+          print("RESET_SEEN_CACHE   :", s.reset_seen_cache)
+          print("===============================")
+          if not s.telegram_bot_token:
+              print("::error::TELEGRAM_BOT_TOKEN is missing - nothing will be posted to Telegram")
+          if not os.path.exists(s.google_credentials_file):
+              print("::error::Google service-account file is missing - the sheet cannot be read")
+          if s.dry_run:
+              print("::warning::DRY_RUN=true - this run will only print previews, not post to Telegram")
+          PY
+
+      - name: Verify Google Sheet access
+        env:
+          DRY_RUN: "true"
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID || vars.GOOGLE_SHEET_ID || 'YOUR_GOOGLE_SHEET_ID' }}
+          GOOGLE_WORKSHEET: ${{ vars.GOOGLE_WORKSHEET || secrets.GOOGLE_WORKSHEET || 'deals' }}
+          GOOGLE_CREDENTIALS_FILE: credentials/google-service-account.json
+          GOOGLE_SHEET_CSV_URL: ${{ secrets.GOOGLE_SHEET_CSV_URL || vars.GOOGLE_SHEET_CSV_URL }}
+        run: |
+          python - <<'PY'
+          import sys
+          from app.config import get_settings
+          from app.google_sheet_source import load_sheet_rows
+
+          s = get_settings()
+          rows, errors = load_sheet_rows(s)
+          print(f"Sheet rows: {len(rows)} | warnings: {len(errors)}")
+          for err in errors[:10]:
+              print(" -", err)
+          if not rows and errors:
+              print(
+                  "FAILED: the sheet could not be read. Check the service-account secret, "
+                  "share the sheet with the service-account email (Viewer), and GOOGLE_WORKSHEET."
+              )
+              sys.exit(1)
+          if rows:
+              print(f"First row: {rows[0]['product_id']} | image: {'yes' if rows[0].get('image_url') else 'NO'}")
+          print("Sheet access OK")
+          PY
+
+      - name: Run daily publisher (100 Deals)
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || vars.DRY_RUN || secrets.DRY_RUN || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID || '@YourDealsChannel' }}
+          AJIO_API_KEY: ${{ secrets.AJIO_API_KEY || vars.AJIO_API_KEY }}
+          AJIO_CAMPAIGN_ID: ${{ vars.AJIO_CAMPAIGN_ID || secrets.AJIO_CAMPAIGN_ID || '1' }}
+          AJIO_PUB_ID: ${{ vars.AJIO_PUB_ID || secrets.AJIO_PUB_ID || '16469' }}
+          AJIO_TRACKING_BASE: ${{ vars.AJIO_TRACKING_BASE || secrets.AJIO_TRACKING_BASE || 'https://ajiotrk.vibconnect.in/click' }}
+          CUELINKS_API_KEY: ${{ secrets.CUELINKS_API_KEY || vars.CUELINKS_API_KEY }}
+          CUELINKS_CID: ${{ secrets.CUELINKS_CID || vars.CUELINKS_CID }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID || vars.GOOGLE_SHEET_ID || 'YOUR_GOOGLE_SHEET_ID' }}
+          GOOGLE_WORKSHEET: ${{ vars.GOOGLE_WORKSHEET || secrets.GOOGLE_WORKSHEET || 'deals' }}
+          GOOGLE_CREDENTIALS_FILE: credentials/google-service-account.json
+          GOOGLE_SHEET_CSV_URL: ${{ secrets.GOOGLE_SHEET_CSV_URL || vars.GOOGLE_SHEET_CSV_URL }}
+          SHEET_CLEAR_AFTER_POST: "false"
+          ALLOW_CSV_INVENTORY: "false"
+          FORCE_REPOST: ${{ inputs.force_repost || vars.FORCE_REPOST || 'false' }}
+          RESET_SEEN_CACHE: ${{ inputs.reset_cache || vars.RESET_SEEN_CACHE || 'false' }}
+          POST_ALL: ${{ inputs.post_all || 'true' }}
+          MAX_POSTS_PER_DAY: ${{ inputs.max_posts || vars.MAX_POSTS_PER_DAY || '100' }}
+          POST_INTERVAL_SECONDS: "4"
+          SHORTEN_AFFILIATE_LINKS: "true"
+        run: python -m app.run_daily
+
+      - name: Publish run result
+        if: always()
+        run: |
+          if [ -f logs/last_run_summary.json ]; then
+            cat logs/last_run_summary.json
+            {
+              echo "### Publisher result"
+              echo '```json'
+              cat logs/last_run_summary.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No run summary was written. Check the logs above."
+          fi
+
+      - name: Display run logs
+        if: always()
+        run: |
+          if [ -d logs ]; then
+            cat logs/*.log 2>/dev/null || true
+          fi
+
+      - name: Upload daily log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-logs-${{ github.run_number }}
+          path: logs/
+          if-no-files-found: ignore

@@ -1,0 +1,7 @@
+# Add your list of Amazon ASINs or URLs below (one per line)
+# The bot will automatically fetch the real product image, current price, and post it!
+B0FXRFTQC1
+B09XYZ9999
+B08N5WRWNW
+B0B3CPQ5PF
+B09V4B24B5
