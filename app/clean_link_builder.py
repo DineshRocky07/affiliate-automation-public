@@ -28,7 +28,7 @@ def shorten_any_affiliate_link(raw_affiliate_link: str) -> str:
     return raw_affiliate_link
 
 
-def build_cuelinks_url(direct_product_url: str, cid: str = "249658", channel_subid: str = "deals_telegram") -> str:
+def build_cuelinks_url(direct_product_url: str, cid: str = "999999", channel_subid: str = "deals_telegram") -> str:
     """Builds a verified Cuelinks redirect link."""
     if not direct_product_url:
         raise ValueError("Product URL cannot be empty")

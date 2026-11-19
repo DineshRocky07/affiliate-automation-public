@@ -79,7 +79,7 @@ class FakePublisher:
 def _settings(dry_run=True):
     return Settings(
         dry_run=dry_run,
-        ajio_pub_id=16469,
+        ajio_pub_id=12345,
         ajio_campaign_id=1,
         ajio_tracking_base="https://ajiotrk.vibconnect.in/click",
     )

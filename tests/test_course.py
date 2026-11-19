@@ -21,14 +21,14 @@ class TestAffiliateCourse(unittest.TestCase):
         self.ajio = AjioProvider(
             api_key="dummy",
             campaign_id=1,
-            pub_id=16469,
+            pub_id=12345,
             tracking_base="https://ajiotrk.vibconnect.in/click",
         )
 
     def test_ajio_link_generation(self):
         link = self.ajio.build_link("TEST1", "https://www.ajio.com/s/shoes")
         self.assertTrue(link.is_eligible)
-        self.assertIn("pub_id=16469", link.tracking_url)
+        self.assertIn("pub_id=12345", link.tracking_url)
         self.assertIn("campaign_id=1", link.tracking_url)
         self.assertIn("p2=viodFallDeals", link.tracking_url)
 
@@ -63,7 +63,7 @@ class TestAffiliateCourse(unittest.TestCase):
 class TestLinkService(unittest.TestCase):
     def _settings(self, **overrides):
         base = dict(
-            ajio_pub_id=16469,
+            ajio_pub_id=12345,
             ajio_campaign_id=1,
             ajio_tracking_base="https://ajiotrk.vibconnect.in/click",
             cuelinks_cid="12345",
@@ -150,7 +150,7 @@ class TestShirtsPipeline(unittest.TestCase):
         )
         settings = Settings(
             dry_run=False,
-            ajio_pub_id=16469,
+            ajio_pub_id=12345,
             ajio_campaign_id=1,
             ajio_tracking_base="https://ajiotrk.vibconnect.in/click",
             shirts_csv=path,
@@ -186,7 +186,7 @@ class TestShirtsPipeline(unittest.TestCase):
         )
         settings = Settings(
             dry_run=True,
-            ajio_pub_id=16469,
+            ajio_pub_id=12345,
             ajio_campaign_id=1,
             ajio_tracking_base="https://ajiotrk.vibconnect.in/click",
             shirts_csv=path,
@@ -235,7 +235,7 @@ class TestShirtsPipeline(unittest.TestCase):
         # 4. Auto-pinning hero deal
         settings = Settings(
             dry_run=False,
-            ajio_pub_id=16469,
+            ajio_pub_id=12345,
             ajio_campaign_id=1,
             ajio_tracking_base="https://ajiotrk.vibconnect.in/click",
         )

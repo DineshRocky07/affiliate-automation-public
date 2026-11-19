@@ -83,7 +83,7 @@ flowchart TD
 AJIO links do not use standard web scrapers due to Akamai bot protection. Instead, links are monetized directly via Trackier v2 tracking redirect endpoints:
 
 * **Base Endpoint:** `https://ajiotrk.vibconnect.in/click`
-* **Publisher ID (`pub_id`):** `16469`
+* **Publisher ID (`pub_id`):** `12345`
 * **Campaign ID (`campaign_id`):** `1`
 * **Parameters Passed:**
   - `p1`: SubID/Channel tag (e.g. `deals_shirts`)
@@ -194,7 +194,7 @@ USE_AI=true                        # Enables AI review/copy when available
 # --- AJIO ACE Program (Trackier v2) ---
 AJIO_API_KEY=YOUR_AJIO_API_KEY
 AJIO_CAMPAIGN_ID=1
-AJIO_PUB_ID=16469
+AJIO_PUB_ID=12345
 AJIO_TRACKING_BASE=https://ajiotrk.vibconnect.in/click
 SHORTEN_AFFILIATE_LINKS=true       # Automatically generate TinyURLs
 
@@ -212,7 +212,7 @@ ALLOW_CSV_INVENTORY=false
 # --- Cuelinks Configuration (v3 API) ---
 CUELINKS_API_KEY=YOUR_CUELINKS_API_KEY
 CUELINKS_API_URL=https://developers.cuelinks.com/pub_api/v3
-CUELINKS_CID=249658
+CUELINKS_CID=999999
 ```
 
 ---
